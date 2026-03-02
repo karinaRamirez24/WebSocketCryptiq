@@ -46,7 +46,7 @@
             if (!userId) return alert('Ingresa un GUID válido como UserId');
 
             connection = new signalR.HubConnectionBuilder()
-                .withUrl(`http://localhost:5098/hubs/chat?userId=${userId}`)
+                .withUrl(`http://localhost:5000/hubs/chat?userId=${userId}`)
                 .withAutomaticReconnect()
                 .build();
 
@@ -97,11 +97,16 @@
         async function markAsRead() {
             if (!connection) return alert('Primero conéctate');
             const messageId = document.getElementById('messageId').value;
-            if (!messageId) return alert('Ingresa un MessageId');
+            if (!messageId) return alert('Ingresa un MessageId válido (GUID)');
 
-            await connection.invoke("MarkMessageAsRead", messageId);
-            log(`👁️ Marcando como leído: ${messageId}`, 'purple');
+            try {
+                await connection.invoke("MarkMessageAsRead", messageId);
+                log(`👁️ Marcando como leído: ${messageId}`, 'purple');
+            } catch (err) {
+                log(`❌ Error al marcar como leído: ${err}`, 'red');
+            }
         }
+
     </script>
 </body>
 </html>

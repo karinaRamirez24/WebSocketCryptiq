@@ -38,6 +38,13 @@ namespace CryptiqChat.Services
             return message;
         }
 
+        public async Task<ChatMessage?> GetMessageByIdAsync(Guid messageId)
+        {
+            return await _db.ChatMessages
+                .Include(m => m.Status) 
+                .FirstOrDefaultAsync(m => m.Id == messageId); 
+        }
+
         // ── Guardar mensaje grupal ─────────────────────────────────
         public async Task<ChatMessage> SaveGroupMessageAsync(
             Guid senderId, Guid groupId,

@@ -67,45 +67,46 @@ namespace CryptiqChat.Hubs
         // ── Mensaje privado + guardado en BD ──────────────────────
         public async Task SendPrivateMessage(string receiverId, string encryptedPayload, string qrData)
         {
-            var senderIdStr = _connectedUsers.FirstOrDefault(x => x.Value == Context.ConnectionId).Key;
-
-            if (string.IsNullOrEmpty(senderIdStr))
+            try
             {
-                Console.WriteLine("⚠️ Issuer not registered in _connectedUsers");
-                return;
+                var senderIdStr = _connectedUsers.FirstOrDefault(x => x.Value == Context.ConnectionId).Key;
+                if (string.IsNullOrEmpty(senderIdStr))
+                {
+                    Console.WriteLine("⚠️ Sender not registered");
+                    return;
+                }
+
+                var senderId = Guid.Parse(senderIdStr);
+                var receiverGuid = Guid.Parse(receiverId);
+                var statusId = _connectedUsers.ContainsKey(receiverId) ? 1 : 4;
+                var saved = await _chatService.SavePrivateMessageAsync(senderId, receiverGuid, encryptedPayload, qrData, statusId);
+
+                var message = new
+                {
+                    Id = saved.Id,
+                    SenderId = senderIdStr,
+                    ReceiverId = receiverId,
+                    Payload = encryptedPayload,
+                    QrData = qrData,
+                    CreatedAt = saved.CreatedAt,
+                    StatusId = saved.StatusId
+                };
+
+                if (_connectedUsers.TryGetValue(receiverId, out var receiverConnectionId))
+                {
+                    await Clients.Client(receiverConnectionId).SendAsync("ReceivePrivateMessage", message);
+                    await _chatService.UpdateMessageStatusAsync(saved.Id, 1);
+                }
+
+                await Clients.Caller.SendAsync("MessageSent", message);
             }
-
-            var senderId     = Guid.Parse(senderIdStr);
-            var receiverGuid = Guid.Parse(receiverId);
-
-            Console.WriteLine($"Entering SendPrivateMessage: sender={senderIdStr}, receiver={receiverId}");
-
-            // 1. Guardar en base de datos
-            var saved = await _chatService.SavePrivateMessageAsync(senderId, receiverGuid, encryptedPayload, qrData, statusId: 4);
-
-            var message = new
+            catch (Exception ex)
             {
-                Id         = saved.Id,
-                SenderId   = senderIdStr,
-                ReceiverId = receiverId,
-                Payload    = encryptedPayload,
-                QrData     = qrData,
-                CreatedAt  = saved.CreatedAt,
-                StatusId   = saved.StatusId
-            };
-
-            // 2. Entregar en tiempo real si el receptor está conectado
-            if (_connectedUsers.TryGetValue(receiverId, out var receiverConnectionId))
-            {
-                await Clients.Client(receiverConnectionId).SendAsync("ReceivePrivateMessage", message);
-                await _chatService.UpdateMessageStatusAsync(saved.Id, 1);
+                Console.WriteLine($"❌ Error en SendPrivateMessage: {ex}");
+                throw; // deja que SignalR lo propague
             }
-
-            // 3. Confirmar al emisor
-            await Clients.Caller.SendAsync("MessageSent", message);
-
-            Console.WriteLine($"💾 Message saved in database: {saved.Id}");
         }
+
 
         // ── Mensaje grupal + guardado en BD ───────────────────────
         public async Task SendGroupMessage(string groupId, string encryptedPayload, string qrData)
@@ -145,5 +146,27 @@ namespace CryptiqChat.Hubs
         {
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupId);
         }
+
+        public async Task MarkMessageAsRead(Guid messageId)
+        {
+            await _chatService.UpdateMessageStatusAsync(messageId, 2); // Read
+            var message = await _chatService.GetMessageByIdAsync(messageId);
+
+            if (message != null)
+            {
+                if (_connectedUsers.TryGetValue(message.SenderId.ToString(), out var senderConnectionId))
+                {
+                    await Clients.Client(senderConnectionId).SendAsync("MessageReadConfirmation", new
+                    {
+                        Id = message.Id,
+                        StatusId = message.StatusId,
+                        ReadAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            Console.WriteLine($"👁️ Message read: {messageId}");
+        }
+
     }
 }
