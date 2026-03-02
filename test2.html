@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cryptiq Chat Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .section { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        h3 { margin-top: 0; }
+        input { margin: 3px; padding: 4px; }
+        button { margin: 3px; padding: 4px 10px; cursor: pointer; }
+        #log { height: 300px; overflow-y: scroll; background: #f9f9f9; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Cryptiq WebSocket Test</h2>
+
+    <!-- CONEXIÓN -->
+    <div class="section">
+        <h3>Conexión</h3>
+        <input id="userId" placeholder="UserId" style="width:380px"/>
+        <button onclick="connect()">Conectar</button>
+        <button onclick="disconnect()">Desconectar</button>
+        <span id="status" style="color:red">● Desconectado</span>
+    </div>
+
+    <!-- MENSAJE PRIVADO -->
+    <div class="section">
+        <h3>Mensaje Privado</h3>
+        <input id="receiverId" placeholder="ReceiverId destino" style="width:380px"/><br/>
+        <input id="privatePayload" placeholder="Mensaje cifrado" style="width:380px"/>
+        <button onclick="sendPrivate()">Enviar</button>
+    </div>
+
+    <!-- GRUPOS -->
+    <div class="section">
+        <h3>Grupos</h3>
+        <input id="groupId" placeholder="GroupId" style="width:380px"/><br/>
+        <button onclick="joinGroup()">Unirse al grupo</button>
+        <button onclick="leaveGroup()">Salir del grupo</button>
+        <br/><br/>
+        <input id="groupPayload" placeholder="Mensaje grupal cifrado" style="width:380px"/>
+        <button onclick="sendGroup()">Enviar al grupo</button>
+    </div>
+
+    <!-- LOG -->
+    <div class="section">
+        <h3>Log de mensajes</h3>
+        <button onclick="clearLog()">Limpiar</button>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let connection = null;
+
+        function log(msg, color = 'black') {
+            const div = document.getElementById('log');
+            div.innerHTML += `<p style="color:${color};margin:2px">[${new Date().toLocaleTimeString()}] ${msg}</p>`;
+            div.scrollTop = div.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        async function connect() {
+            const userId = document.getElementById('userId').value;
+            if (!userId) return alert('Ingresa un UserId');
+
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(`http://localhost:5098/hubs/chat?userId=${userId}`)
+                .withAutomaticReconnect()
+                .build();
+
+            // Mensajes privados
+            connection.on("ReceivePrivateMessage", (msg) => {
+                log(`📨 [PRIVADO] De ${msg.senderId}: ${msg.payload}`, 'blue');
+            });
+
+            connection.on("MessageSent", (msg) => {
+                log(`✅ Mensaje enviado | ID: ${msg.id}`, 'green');
+            });
+
+            // Mensajes grupales
+            connection.on("ReceiveGroupMessage", (msg) => {
+                log(`👥 [GRUPO] De ${msg.senderId} en grupo ${msg.groupId}: ${msg.payload}`, 'purple');
+            });
+
+            // Notificación cuando alguien se une
+            connection.on("UserJoinedGroup", (data) => {
+                log(`➕ Usuario ${data.userId} se unió al grupo ${data.groupId}`, 'orange');
+            });
+
+            try {
+                await connection.start();
+                document.getElementById('status').textContent = '● Conectado';
+                document.getElementById('status').style.color = 'green';
+                log(`✅ Conectado como ${userId}`, 'green');
+            } catch (err) {
+                log(`❌ Error: ${err}`, 'red');
+            }
+        }
+
+        async function disconnect() {
+            if (connection) {
+                await connection.stop();
+                document.getElementById('status').textContent = '● Desconectado';
+                document.getElementById('status').style.color = 'red';
+                log('❌ Desconectado', 'red');
+            }
+        }
+
+        async function sendPrivate() {
+            if (!connection) return alert('Primero conéctate');
+            const receiverId = document.getElementById('receiverId').value;
+            const payload    = document.getElementById('privatePayload').value;
+            if (!receiverId || !payload) return alert('Completa los campos');
+
+            await connection.invoke("SendPrivateMessage", receiverId, payload, "qr_data_prueba");
+            log(`📤 Enviando privado a ${receiverId}: ${payload}`, 'orange');
+        }
+
+        async function joinGroup() {
+            if (!connection) return alert('Primero conéctate');
+            const groupId = document.getElementById('groupId').value;
+            if (!groupId) return alert('Ingresa un GroupId');
+
+            await connection.invoke("JoinGroup", groupId);
+            log(`➕ Uniéndose al grupo ${groupId}...`, 'orange');
+        }
+
+        async function leaveGroup() {
+            if (!connection) return alert('Primero conéctate');
+            const groupId = document.getElementById('groupId').value;
+            if (!groupId) return alert('Ingresa un GroupId');
+
+            await connection.invoke("LeaveGroup", groupId);
+            log(`➖ Saliendo del grupo ${groupId}`, 'gray');
+        }
+
+        async function sendGroup() {
+            if (!connection) return alert('Primero conéctate');
+            const groupId = document.getElementById('groupId').value;
+            const payload = document.getElementById('groupPayload').value;
+            if (!groupId || !payload) return alert('Completa los campos');
+
+            await connection.invoke("SendGroupMessage", groupId, payload, "qr_group_prueba");
+            log(`📤 Enviando al grupo ${groupId}: ${payload}`, 'orange');
+        }
+    </script>
+</body>
+</html>

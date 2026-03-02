@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cryptiq Chat Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+</head>
+<body>
+    <h2>Cryptiq WebSocket Test</h2>
+
+    <div>
+        <input id="userId" placeholder="UserId (GUID)" style="width:400px" />
+        <button onclick="connect()">Conectar</button>
+        <button onclick="disconnect()">Desconectar</button>
+        <span id="status" style="color:red">● Desconectado</span>
+    </div>
+
+    <br />
+
+    <div>
+        <input id="receiverId" placeholder="ReceiverId destino (GUID)" style="width:400px" />
+        <input id="payload" placeholder="Mensaje cifrado" />
+        <button onclick="sendMessage()">Enviar Mensaje Privado</button>
+    </div>
+
+    <br />
+    <div>
+        <input id="messageId" placeholder="MessageId a marcar como leído" style="width:400px" />
+        <button onclick="markAsRead()">Marcar como leído</button>
+    </div>
+
+    <br />
+    <h3>Log de mensajes:</h3>
+    <div id="log" style="border:1px solid #ccc; padding:10px; height:300px; overflow-y:scroll; font-family:monospace"></div>
+
+    <script>
+        let connection = null;
+
+        function log(msg, color = 'black') {
+            const div = document.getElementById('log');
+            div.innerHTML += `<p style="color:${color};margin:2px">[${new Date().toLocaleTimeString()}] ${msg}</p>`;
+            div.scrollTop = div.scrollHeight;
+        }
+
+        async function connect() {
+            const userId = document.getElementById('userId').value;
+            if (!userId) return alert('Ingresa un GUID válido como UserId');
+
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(`http://localhost:5098/hubs/chat?userId=${userId}`)
+                .withAutomaticReconnect()
+                .build();
+
+            // Escuchar mensajes privados entrantes
+            connection.on("ReceivePrivateMessage", (message) => {
+                log(`📨 Mensaje recibido de ${message.senderId}: ${message.payload} (Status=${message.statusId})`, 'blue');
+                document.getElementById('messageId').value = message.id; // auto-fill para pruebas
+            });
+
+            // Confirmación de envío
+            connection.on("MessageSent", (message) => {
+                log(`✅ Mensaje enviado a ${message.receiverId} (Status=${message.statusId})`, 'green');
+            });
+
+            // Confirmación de lectura
+            connection.on("MessageReadConfirmation", (info) => {
+                log(`👁️ Mensaje ${info.id} marcado como leído (Status=${info.statusId})`, 'purple');
+            });
+
+            try {
+                await connection.start();
+                document.getElementById('status').textContent = '● Conectado';
+                document.getElementById('status').style.color = 'green';
+                log(`✅ Conectado como ${userId}`, 'green');
+            } catch (err) {
+                log(`❌ Error: ${err}`, 'red');
+            }
+        }
+
+        async function disconnect() {
+            if (connection) {
+                await connection.stop();
+                document.getElementById('status').textContent = '● Desconectado';
+                document.getElementById('status').style.color = 'red';
+                log('❌ Desconectado', 'red');
+            }
+        }
+
+        async function sendMessage() {
+            if (!connection) return alert('Primero conéctate');
+            const receiverId = document.getElementById('receiverId').value;
+            const payload = document.getElementById('payload').value;
+
+            await connection.invoke("SendPrivateMessage", receiverId, payload, "qr_data_prueba");
+            log(`📤 Enviando a ${receiverId}: ${payload}`, 'orange');
+        }
+
+        async function markAsRead() {
+            if (!connection) return alert('Primero conéctate');
+            const messageId = document.getElementById('messageId').value;
+            if (!messageId) return alert('Ingresa un MessageId');
+
+            await connection.invoke("MarkMessageAsRead", messageId);
+            log(`👁️ Marcando como leído: ${messageId}`, 'purple');
+        }
+    </script>
+</body>
+</html>

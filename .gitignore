@@ -1,0 +1,51 @@
+# Archivos de compilación
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+
+# Archivos de usuario y configuración local
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Archivos de paquetes NuGet
+*.nupkg
+*.snupkg
+# Carpetas de paquetes
+packages/
+# Bloquear restauración automática de paquetes
+*.nuget.props
+*.nuget.targets
+
+# Archivos de configuración de VS Code y Rider
+.vscode/
+.idea/
+.vs/
+
+# Archivos de sistema
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Archivos temporales
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# Publicaciones
+publish/
+*.pubxml
+*.publishproj
+
+# Configuración de SSL o secretos (ajusta según tu proyecto)
+*.pfx
+*.p12
+*.key
+*.crt
+
+# Archivos de entorno
+.env
+.env.*
